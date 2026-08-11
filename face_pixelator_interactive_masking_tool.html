@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Face Pixelator - Manual Shape Masking</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .canvas-container {
+      user-select: none;
+      touch-action: none;
+    }
+    .glass-panel {
+      background: rgba(30, 41, 59, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none">
+
+  <header class="h-16 glass-panel border-b border-slate-800 px-2.5 sm:px-6 flex items-center justify-between z-20">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0 hidden xs:flex">
+        <i class="fa-solid fa-user-ninja text-white text-base sm:text-lg"></i>
+      </div>
+      <div>
+        <h1 class="font-bold text-slate-100 text-xs sm:text-base leading-tight">
+          Face Pixelator
+        </h1>
+        <p class="text-[11px] sm:text-xs text-slate-400 hidden md:block">Precision shape masking running 100% in browser</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-1 sm:gap-2">
+      <button id="defaultImgBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium border border-slate-700 transition-all flex items-center gap-1" title="Load default xshroom sample image">
+        <i class="fa-solid fa-image text-emerald-400"></i>
+        <span>Sample</span>
+      </button>
+
+      <label class="cursor-pointer bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium border border-slate-700 transition-all flex items-center gap-1">
+        <i class="fa-solid fa-folder-open text-indigo-400"></i>
+        <span>Select Image</span>
+        <input type="file" id="imageInput" accept="image/*" class="hidden">
+      </label>
+      
+      <button id="exportBtn" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all flex items-center gap-1">
+        <i class="fa-solid fa-download"></i>
+        <span>Export</span>
+      </button>
+
+      <!-- Mobile Controls Toggle Button -->
+      <button id="toggleSidebarBtn" class="md:hidden bg-slate-800 hover:bg-slate-700 text-slate-200 px-2 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium border border-slate-700 transition-all flex items-center gap-1 active:scale-95">
+        <i class="fa-solid fa-sliders text-indigo-400"></i>
+        <span class="font-semibold">Controls</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 flex overflow-hidden relative">
+    
+    <!-- Mobile Sidebar Backdrop Overlay -->
+    <div id="sidebarBackdrop" class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-30 opacity-0 pointer-events-none transition-opacity duration-300 md:hidden"></div>
+
+    <!-- Canvas Interactive Workspace -->
+    <div class="flex-1 bg-slate-950 flex flex-col items-center justify-center p-2 sm:p-4 relative overflow-hidden" id="canvasViewport">
+      
+      <!-- Floating Mobile Controls Toggle -->
+      <button id="floatingControlsBtn" class="md:hidden absolute top-4 right-4 bg-indigo-600/90 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-full text-xs font-semibold shadow-xl border border-indigo-400/30 flex items-center gap-2 z-20 backdrop-blur-md transition active:scale-95">
+        <i class="fa-solid fa-sliders text-indigo-200"></i>
+        <span>Controls</span>
+      </button>
+
+      <!-- Context Notification Toast -->
+      <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-800/90 text-slate-200 text-xs px-4 py-2 rounded-full border border-slate-700 shadow-xl opacity-0 transition-opacity duration-300 pointer-events-none z-20 flex items-center gap-2 max-w-[90vw] text-center">
+        <i class="fa-solid fa-circle-info text-indigo-400 shrink-0"></i>
+        <span id="toastMsg">Drag points to fit the mask to the face contour</span>
+      </div>
+
+      <div class="canvas-container relative flex items-center justify-center max-w-full max-h-full">
+        <canvas id="mainCanvas" class="rounded-xl shadow-2xl border border-slate-800 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:16px_16px] cursor-crosshair"></canvas>
+        
+        <!-- Upload Dropzone Prompt when no image is loaded -->
+        <div id="dropzonePrompt" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/95 border-2 border-dashed border-indigo-500/40 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500 hover:bg-slate-900 transition group">
+          <div class="w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-2xl mb-3 group-hover:scale-110 transition">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+          </div>
+          <p class="text-sm font-semibold text-slate-200">Upload or Drag & Drop Image</p>
+          <p class="text-xs text-slate-400 mt-1">Select a profile picture, cartoon, or photo</p>
+        </div>
+      </div>
+
+      <!-- Quick Canvas Overlay Controls -->
+      <div class="absolute bottom-4 left-1/2 -translate-x-1/2 glass-panel px-3 sm:px-4 py-2 rounded-full border border-slate-700/50 flex items-center gap-2.5 sm:gap-4 text-xs z-10 shadow-lg whitespace-nowrap">
+        <button id="toggleHandlesBtn" class="text-slate-300 hover:text-white flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-eye text-indigo-400" id="handlesIcon"></i>
+          <span id="handlesLabel">Hide Nodes</span>
+        </button>
+        <div class="h-3 w-px bg-slate-700"></div>
+        <button id="resetMaskBtn" class="text-slate-300 hover:text-white flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-rotate-right text-amber-400"></i>
+          <span>Reset Shape</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Off-canvas Side Panel on Mobile / Fixed on Desktop -->
+    <aside id="sidebarPanel" class="fixed md:relative right-0 top-0 bottom-0 md:top-auto md:bottom-auto w-80 max-w-[85vw] glass-panel border-l border-slate-800 flex flex-col z-40 overflow-y-auto transform translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none">
+      
+      <!-- Mobile Close Drawer Header -->
+      <div class="p-3.5 border-b border-slate-800 flex items-center justify-between md:hidden bg-slate-900/90">
+        <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-indigo-400"></i> Masking Controls
+        </h3>
+        <button id="closeSidebarBtn" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-base"></i>
+        </button>
+      </div>
+      
+      <!-- Mask Type Selector -->
+      <div class="p-4 border-b border-slate-800/80 space-y-3">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Mask Geometry</h3>
+        
+        <div class="grid grid-cols-2 gap-2 p-1 bg-slate-900/80 rounded-xl border border-slate-800">
+          <button id="typeEllipse" class="shape-type-btn py-2 px-3 rounded-lg text-xs font-medium transition flex items-center justify-center gap-2 bg-indigo-600 text-white">
+            <i class="fa-regular fa-circle"></i>
+            <span>Ellipse / Oval</span>
+          </button>
+          <button id="typePolygon" class="shape-type-btn py-2 px-3 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-draw-polygon"></i>
+            <span>Custom Mesh</span>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400 leading-relaxed" id="shapeDescription">
+          Drag handles to adjust center, width, height, and rotation. Fits standard rounded face shapes quickly.
+        </p>
+      </div>
+
+      <!-- Masking & Pixelation Parameters -->
+      <div class="p-4 border-b border-slate-800/80 space-y-5">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Mosaic Pixelation Controls</h3>
+
+        <!-- Pixel Block Size Slider -->
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <label for="pixelSize" class="text-xs text-slate-300">Mosaic Block Size</label>
+            <span id="pixelSizeVal" class="text-xs font-mono text-indigo-400 font-bold">16 px</span>
+          </div>
+          <input type="range" id="pixelSize" min="4" max="48" step="2" value="16" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+        </div>
+
+        <!-- Feathering / Edge Softness -->
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <label for="featherBlur" class="text-xs text-slate-300">Edge Softness (Feather)</label>
+            <span id="featherBlurVal" class="text-xs font-mono text-indigo-400 font-bold">0 px</span>
+          </div>
+          <input type="range" id="featherBlur" min="0" max="25" step="1" value="0" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+        </div>
+      </div>
+
+      <!-- Polygon Dynamic Node Editor Controls -->
+      <div id="polygonControls" class="p-4 border-b border-slate-800/80 space-y-3 hidden">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Mesh Control Points</h3>
+        <p class="text-[11px] text-slate-400">Click anywhere on the orange polygon perimeter line to add a point. Double-click a point to delete it.</p>
+        <div class="flex gap-2">
+          <button id="addPointBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-1.5 text-xs text-slate-200 transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-plus text-indigo-400"></i> Add Point
+          </button>
+          <button id="subPointBtn" class="flex-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg py-1.5 text-xs text-slate-200 transition flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-minus text-rose-400"></i> Remove Point
+          </button>
+        </div>
+      </div>
+
+      <!-- How It Works Explanation -->
+      <div class="p-4 space-y-2 mt-auto">
+        <div class="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/30">
+          <h4 class="text-xs font-semibold text-indigo-300 flex items-center gap-1.5 mb-1">
+            <i class="fa-solid fa-lightbulb"></i> Why this works without AI
+          </h4>
+          <p class="text-[11px] text-slate-400 leading-relaxed">
+            Standard AI faces difficulties distinguishing cartoon ears, anime eyes, or non-human art. By letting you define the clipping boundary interactively, the HTML5 Canvas clips and pixelates <strong>only</strong> the selected facial features while leaving hair, ears, clothing, and backgrounds perfectly intact.
+          </p>
+        </div>
+      </div>
+
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Application State
+    const state = {
+      image: new Image(),
+      imageLoaded: false,
+      maskType: 'ellipse', // 'ellipse' or 'polygon'
+      pixelSize: 16,
+      featherBlur: 0,
+      showHandles: true,
+      
+      // Ellipse Mask State (normalized relative to image dimensions)
+      ellipse: {
+        cx: 0.5,
+        cy: 0.48,
+        rx: 0.22,
+        ry: 0.28,
+        rotation: 0 // angle in radians
+      },
+
+      // Custom Polygon Nodes (array of {x, y} normalized 0..1)
+      polygon: [
+        { x: 0.50, y: 0.22 }, // Forehead top
+        { x: 0.68, y: 0.32 }, // Right temple
+        { x: 0.72, y: 0.50 }, // Right cheek
+        { x: 0.62, y: 0.70 }, // Right jaw
+        { x: 0.50, y: 0.76 }, // Chin bottom
+        { x: 0.38, y: 0.70 }, // Left jaw
+        { x: 0.28, y: 0.50 }, // Left cheek
+        { x: 0.32, y: 0.32 }  // Left temple
+      ],
+
+      // Dragging Interaction State
+      isDragging: false,
+      activeTarget: null,
+      dragStartPos: { x: 0, y: 0 },
+      hoverTarget: null
+    };
+
+    function loadFileImage(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          state.image = img;
+          state.imageLoaded = true;
+          document.getElementById('dropzonePrompt').classList.add('hidden');
+          resizeCanvasToFit();
+          render();
+          showToast('Image loaded successfully!');
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function resizeCanvasToFit() {
+      if (!state.imageLoaded) {
+        canvas.width = 500;
+        canvas.height = 500;
+        return;
+      }
+      
+      const viewport = document.getElementById('canvasViewport');
+      const maxW = viewport.clientWidth - 48;
+      const maxH = viewport.clientHeight - 80;
+      
+      let width = state.image.width;
+      let height = state.image.height;
+
+      const scale = Math.min(maxW / width, maxH / height, 1);
+      
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+    }
+
+    function drawCensoredEffect(targetCtx, pathFn) {
+      if (!state.imageLoaded) return;
+
+      const w = targetCtx.canvas.width;
+      const h = targetCtx.canvas.height;
+
+      // Create offscreen buffer canvas for isolated masked mosaic pixelation
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const mctx = maskCanvas.getContext('2d');
+
+      // 1. Draw clipping path
+      mctx.save();
+      mctx.beginPath();
+      pathFn(mctx);
+      mctx.clip();
+
+      // Apply feathering/blur filter if configured
+      if (state.featherBlur > 0) {
+        mctx.filter = `blur(${state.featherBlur}px)`;
+      }
+
+      // Classic Mosaic Pixelation: Downscale then upscale crisp blocks back onto clipped canvas
+      const pSize = Math.max(2, state.pixelSize);
+      const smallW = Math.max(1, Math.ceil(w / pSize));
+      const smallH = Math.max(1, Math.ceil(h / pSize));
+
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = smallW;
+      pCanvas.height = smallH;
+      const pctx = pCanvas.getContext('2d');
+
+      // Turn off smoothing for crisp mosaic pixel blocks
+      pctx.imageSmoothingEnabled = false;
+      mctx.imageSmoothingEnabled = false;
+
+      pctx.drawImage(state.image, 0, 0, smallW, smallH);
+      mctx.drawImage(pCanvas, 0, 0, smallW, smallH, 0, 0, w, h);
+
+      mctx.restore();
+
+      // Composite the pixelated mask back on top of base image
+      targetCtx.drawImage(maskCanvas, 0, 0);
+    }
+
+    function defineCurrentPath(ctxTarget) {
+      const w = ctxTarget.canvas.width;
+      const h = ctxTarget.canvas.height;
+
+      if (state.maskType === 'ellipse') {
+        const e = state.ellipse;
+        const cx = e.cx * w;
+        const cy = e.cy * h;
+        const rx = e.rx * w;
+        const ry = e.ry * h;
+
+        ctxTarget.ellipse(cx, cy, Math.max(5, rx), Math.max(5, ry), e.rotation, 0, Math.PI * 2);
+
+      } else if (state.maskType === 'polygon') {
+        const pts = state.polygon;
+        if (pts.length < 3) return;
+
+        ctxTarget.moveTo(pts[0].x * w, pts[0].y * h);
+        for (let i = 1; i < pts.length; i++) {
+          ctxTarget.lineTo(pts[i].x * w, pts[i].y * h);
+        }
+        ctxTarget.closePath();
+      }
+    }
+
+    function render() {
+      if (!state.imageLoaded) return;
+
+      const w = canvas.width;
+      const h = canvas.height;
+
+      // Clear Canvas
+      ctx.clearRect(0, 0, w, h);
+
+      // 1. Render Base Image
+      ctx.drawImage(state.image, 0, 0, w, h);
+
+      // 2. Render Pixelated Masked Face
+      drawCensoredEffect(ctx, (pathCtx) => defineCurrentPath(pathCtx));
+
+      // 3. Render Vector Path Guides & Handles (If visible)
+      if (state.showHandles) {
+        renderOverlayHandles(w, h);
+      }
+    }
+
+    function renderOverlayHandles(w, h) {
+      ctx.save();
+
+      // Stroke defined shape path outline
+      ctx.beginPath();
+      defineCurrentPath(ctx);
+      ctx.strokeStyle = '#f97316'; // Vivid orange outline
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (state.maskType === 'ellipse') {
+        const e = state.ellipse;
+        const cx = e.cx * w;
+        const cy = e.cy * h;
+        const rx = e.rx * w;
+        const ry = e.ry * h;
+
+        // Center Handle
+        drawHandle(cx, cy, 'center', state.hoverTarget === 'ellipse-center');
+
+        // Radius Handles
+        const rxX = cx + rx * Math.cos(e.rotation);
+        const rxY = cy + rx * Math.sin(e.rotation);
+        drawHandle(rxX, rxY, 'rx', state.hoverTarget === 'ellipse-rx');
+
+        const ryX = cx - ry * Math.sin(e.rotation);
+        const ryY = cy + ry * Math.cos(e.rotation);
+        drawHandle(ryX, ryY, 'ry', state.hoverTarget === 'ellipse-ry');
+
+        // Axis line visualizer
+        ctx.strokeStyle = 'rgba(249, 115, 22, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy); ctx.lineTo(rxX, rxY);
+        ctx.moveTo(cx, cy); ctx.lineTo(ryX, ryY);
+        ctx.stroke();
+
+      } else if (state.maskType === 'polygon') {
+        state.polygon.forEach((pt, idx) => {
+          const px = pt.x * w;
+          const py = pt.y * h;
+          const isHover = state.hoverTarget && state.hoverTarget.type === 'polygon-point' && state.hoverTarget.index === idx;
+          drawHandle(px, py, 'node', isHover);
+        });
+      }
+
+      ctx.restore();
+    }
+
+    function drawHandle(x, y, type, isHovered) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, isHovered ? 8 : 6, 0, Math.PI * 2);
+      ctx.fillStyle = isHovered ? '#6366f1' : '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: (clientX - rect.left) / canvas.width,
+        y: (clientY - rect.top) / canvas.height,
+        pixelX: clientX - rect.left,
+        pixelY: clientY - rect.top
+      };
+    }
+
+    function hitTest(coords) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const px = coords.pixelX;
+      const py = coords.pixelY;
+      const hitRadius = 12;
+
+      if (state.maskType === 'ellipse') {
+        const e = state.ellipse;
+        const cx = e.cx * w;
+        const cy = e.cy * h;
+
+        // Radius X handle
+        const rxX = cx + (e.rx * w) * Math.cos(e.rotation);
+        const rxY = cy + (e.rx * w) * Math.sin(e.rotation);
+        if (Math.hypot(px - rxX, py - rxY) <= hitRadius) return 'ellipse-rx';
+
+        // Radius Y handle
+        const ryX = cx - (e.ry * h) * Math.sin(e.rotation);
+        const ryY = cy + (e.ry * h) * Math.cos(e.rotation);
+        if (Math.hypot(px - ryX, py - ryY) <= hitRadius) return 'ellipse-ry';
+
+        // Center handle
+        if (Math.hypot(px - cx, py - cy) <= hitRadius) return 'ellipse-center';
+
+        // Inside ellipse body drag
+        const dx = px - cx;
+        const dy = py - cy;
+        const rotatedX = dx * Math.cos(-e.rotation) - dy * Math.sin(-e.rotation);
+        const rotatedY = dx * Math.sin(-e.rotation) + dy * Math.cos(-e.rotation);
+        if (Math.pow(rotatedX / (e.rx * w), 2) + Math.pow(rotatedY / (e.ry * h), 2) <= 1) {
+          return 'ellipse-body';
+        }
+
+      } else if (state.maskType === 'polygon') {
+        for (let i = 0; i < state.polygon.length; i++) {
+          const pt = state.polygon[i];
+          if (Math.hypot(px - (pt.x * w), py - (pt.y * h)) <= hitRadius) {
+            return { type: 'polygon-point', index: i };
+          }
+        }
+      }
+
+      return null;
+    }
+
+    function onPointerDown(e) {
+      if (!state.showHandles || !state.imageLoaded) return;
+      const coords = getCanvasCoords(e);
+      const target = hitTest(coords);
+
+      if (target) {
+        state.isDragging = true;
+        state.activeTarget = target;
+        state.dragStartPos = coords;
+      }
+    }
+
+    function onPointerMove(e) {
+      if (!state.imageLoaded) return;
+      const coords = getCanvasCoords(e);
+
+      if (!state.isDragging) {
+        const target = hitTest(coords);
+        state.hoverTarget = target;
+        canvas.style.cursor = target ? 'grab' : 'crosshair';
+        render();
+        return;
+      }
+
+      canvas.style.cursor = 'grabbing';
+      const w = canvas.width;
+      const h = canvas.height;
+
+      if (state.maskType === 'ellipse') {
+        const eState = state.ellipse;
+        const target = state.activeTarget;
+
+        if (target === 'ellipse-center' || target === 'ellipse-body') {
+          const dx = coords.x - state.dragStartPos.x;
+          const dy = coords.y - state.dragStartPos.y;
+          eState.cx = Math.max(0.05, Math.min(0.95, eState.cx + dx));
+          eState.cy = Math.max(0.05, Math.min(0.95, eState.cy + dy));
+          state.dragStartPos = coords;
+
+        } else if (target === 'ellipse-rx') {
+          const cxPx = eState.cx * w;
+          const cyPx = eState.cy * h;
+          const dist = Math.hypot(coords.pixelX - cxPx, coords.pixelY - cyPx);
+          eState.rx = Math.max(0.02, dist / w);
+
+        } else if (target === 'ellipse-ry') {
+          const cxPx = eState.cx * w;
+          const cyPx = eState.cy * h;
+          const dist = Math.hypot(coords.pixelX - cxPx, coords.pixelY - cyPx);
+          eState.ry = Math.max(0.02, dist / h);
+        }
+
+      } else if (state.maskType === 'polygon' && state.activeTarget?.type === 'polygon-point') {
+        const idx = state.activeTarget.index;
+        state.polygon[idx].x = Math.max(0, Math.min(1, coords.x));
+        state.polygon[idx].y = Math.max(0, Math.min(1, coords.y));
+      }
+
+      render();
+    }
+
+    function onPointerUp() {
+      state.isDragging = false;
+      state.activeTarget = null;
+      canvas.style.cursor = 'crosshair';
+    }
+
+    function onCanvasDoubleClick(e) {
+      if (!state.imageLoaded || state.maskType !== 'polygon') return;
+      const coords = getCanvasCoords(e);
+      const target = hitTest(coords);
+
+      if (target && target.type === 'polygon-point') {
+        if (state.polygon.length > 3) {
+          state.polygon.splice(target.index, 1);
+          showToast(`Removed vertex point`);
+          render();
+        } else {
+          showToast(`Polygon must have at least 3 points`);
+        }
+      } else {
+        insertPolygonPoint(coords);
+      }
+    }
+
+    function insertPolygonPoint(coords) {
+      const pts = state.polygon;
+      let minDistance = Infinity;
+      let insertIdx = pts.length;
+
+      for (let i = 0; i < pts.length; i++) {
+        const nextIdx = (i + 1) % pts.length;
+        const dist = pointToSegmentDistance(coords, pts[i], pts[nextIdx]);
+        if (dist < minDistance) {
+          minDistance = dist;
+          insertIdx = nextIdx;
+        }
+      }
+
+      pts.splice(insertIdx, 0, { x: coords.x, y: coords.y });
+      showToast(`Added new vertex point`);
+      render();
+    }
+
+    function pointToSegmentDistance(p, a, b) {
+      const l2 = Math.hypot(b.x - a.x, b.y - a.y) ** 2;
+      if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
+      let t = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y)));
+    }
+
+    function exportImage() {
+      if (!state.imageLoaded) {
+        showToast('Please upload an image first');
+        return;
+      }
+
+      // Render full resolution clean canvas offscreen
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = state.image.width;
+      exportCanvas.height = state.image.height;
+      const ectx = exportCanvas.getContext('2d');
+
+      ectx.drawImage(state.image, 0, 0);
+
+      // Render censorship effect cleanly without handle overlays
+      drawCensoredEffect(ectx, (pCtx) => defineCurrentPath(pCtx));
+
+      // Trigger automatic file download
+      const link = document.createElement('a');
+      link.download = 'pixelated-face.png';
+      link.href = exportCanvas.toDataURL('image/png');
+      link.click();
+      showToast(`Exported PNG successfully!`);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').innerText = msg;
+      toast.classList.remove('opacity-0');
+      toast.classList.add('opacity-100');
+      setTimeout(() => {
+        toast.classList.remove('opacity-100');
+        toast.classList.add('opacity-0');
+      }, 2500);
+    }
+
+    function setupEventListeners() {
+      const imageInput = document.getElementById('imageInput');
+      const dropzone = document.getElementById('dropzonePrompt');
+      const viewport = document.getElementById('canvasViewport');
+
+      // File Input Change
+      imageInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          loadFileImage(e.target.files[0]);
+        }
+      });
+
+      // Dropzone Click
+      dropzone.addEventListener('click', () => imageInput.click());
+
+      // Drag and Drop support
+      viewport.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        viewport.classList.add('bg-slate-900');
+      });
+
+      viewport.addEventListener('dragleave', () => {
+        viewport.classList.remove('bg-slate-900');
+      });
+
+      viewport.addEventListener('drop', (e) => {
+        e.preventDefault();
+        viewport.classList.remove('bg-slate-900');
+        if (e.dataTransfer.files.length > 0) {
+          loadFileImage(e.dataTransfer.files[0]);
+        }
+      });
+
+      // Default Image Button
+      document.getElementById('defaultImgBtn').addEventListener('click', loadDefaultImage);
+
+      // Export Button
+      document.getElementById('exportBtn').addEventListener('click', exportImage);
+
+      // Mobile Sidebar Drawer Controls
+      document.getElementById('toggleSidebarBtn')?.addEventListener('click', toggleSidebar);
+      document.getElementById('floatingControlsBtn')?.addEventListener('click', openSidebar);
+      document.getElementById('closeSidebarBtn')?.addEventListener('click', closeSidebar);
+      document.getElementById('sidebarBackdrop')?.addEventListener('click', closeSidebar);
+
+      // Mask Type Switcher
+      const typeEllipseBtn = document.getElementById('typeEllipse');
+      const typePolyBtn = document.getElementById('typePolygon');
+      const polyControls = document.getElementById('polygonControls');
+      const shapeDesc = document.getElementById('shapeDescription');
+
+      typeEllipseBtn.addEventListener('click', () => {
+        state.maskType = 'ellipse';
+        typeEllipseBtn.className = "shape-type-btn py-2 px-3 rounded-lg text-xs font-medium transition flex items-center justify-center gap-2 bg-indigo-600 text-white";
+        typePolyBtn.className = "shape-type-btn py-2 px-3 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-2";
+        polyControls.classList.add('hidden');
+        shapeDesc.innerText = "Drag handles to adjust center, width, height, and rotation. Fits standard rounded face shapes quickly.";
+        render();
+      });
+
+      typePolyBtn.addEventListener('click', () => {
+        state.maskType = 'polygon';
+        typePolyBtn.className = "shape-type-btn py-2 px-3 rounded-lg text-xs font-medium transition flex items-center justify-center gap-2 bg-indigo-600 text-white";
+        typeEllipseBtn.className = "shape-type-btn py-2 px-3 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition flex items-center justify-center gap-2";
+        polyControls.classList.remove('hidden');
+        shapeDesc.innerText = "Click to drag nodes around complex contours (jawlines, hair bangs, cartoon ears). Double-click to add or remove points.";
+        render();
+      });
+
+      // Sliders & Controls
+      const pixelSlider = document.getElementById('pixelSize');
+      pixelSlider.addEventListener('input', (e) => {
+        state.pixelSize = parseInt(e.target.value, 10);
+        document.getElementById('pixelSizeVal').innerText = `${state.pixelSize} px`;
+        render();
+      });
+
+      const featherSlider = document.getElementById('featherBlur');
+      featherSlider.addEventListener('input', (e) => {
+        state.featherBlur = parseInt(e.target.value, 10);
+        document.getElementById('featherBlurVal').innerText = `${state.featherBlur} px`;
+        render();
+      });
+
+      // Canvas Overlay Controls
+      const toggleHandlesBtn = document.getElementById('toggleHandlesBtn');
+      toggleHandlesBtn.addEventListener('click', () => {
+        state.showHandles = !state.showHandles;
+        document.getElementById('handlesLabel').innerText = state.showHandles ? 'Hide Control Nodes' : 'Show Control Nodes';
+        document.getElementById('handlesIcon').className = state.showHandles ? 'fa-solid fa-eye text-indigo-400' : 'fa-solid fa-eye-slash text-slate-500';
+        render();
+      });
+
+      document.getElementById('resetMaskBtn').addEventListener('click', () => {
+        state.ellipse = { cx: 0.5, cy: 0.48, rx: 0.22, ry: 0.28, rotation: 0 };
+        state.polygon = [
+          { x: 0.50, y: 0.22 }, { x: 0.68, y: 0.32 }, { x: 0.72, y: 0.50 },
+          { x: 0.62, y: 0.70 }, { x: 0.50, y: 0.76 }, { x: 0.38, y: 0.70 },
+          { x: 0.28, y: 0.50 }, { x: 0.32, y: 0.32 }
+        ];
+        showToast('Reset mask geometry');
+        render();
+      });
+
+      // Polygon add/sub buttons
+      document.getElementById('addPointBtn').addEventListener('click', () => {
+        state.polygon.push({ x: 0.5, y: 0.5 });
+        render();
+      });
+      document.getElementById('subPointBtn').addEventListener('click', () => {
+        if (state.polygon.length > 3) {
+          state.polygon.pop();
+          render();
+        }
+      });
+
+      // Canvas Pointer Interactions
+      canvas.addEventListener('mousedown', onPointerDown);
+      canvas.addEventListener('mousemove', onPointerMove);
+      window.addEventListener('mouseup', onPointerUp);
+      canvas.addEventListener('dblclick', onCanvasDoubleClick);
+
+      // Touch events support for mobile
+      canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+      canvas.addEventListener('touchmove', onPointerMove, { passive: true });
+      window.addEventListener('touchend', onPointerUp);
+
+      // Responsive window resize
+      window.addEventListener('resize', () => {
+        if (state.imageLoaded) {
+          resizeCanvasToFit();
+          render();
+        }
+      });
+    }
+
+    function openSidebar() {
+      const panel = document.getElementById('sidebarPanel');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      panel.classList.remove('translate-x-full');
+      panel.classList.add('translate-x-0');
+      backdrop.classList.remove('opacity-0', 'pointer-events-none');
+      backdrop.classList.add('opacity-100', 'pointer-events-auto');
+    }
+
+    function closeSidebar() {
+      const panel = document.getElementById('sidebarPanel');
+      const backdrop = document.getElementById('sidebarBackdrop');
+      panel.classList.remove('translate-x-0');
+      panel.classList.add('translate-x-full');
+      backdrop.classList.remove('opacity-100', 'pointer-events-auto');
+      backdrop.classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    function toggleSidebar() {
+      const panel = document.getElementById('sidebarPanel');
+      if (panel.classList.contains('translate-x-full')) {
+        openSidebar();
+      } else {
+        closeSidebar();
+      }
+    }
+
+    function loadDefaultImage() {
+      const img = new Image();
+      img.onload = () => {
+        state.image = img;
+        state.imageLoaded = true;
+        document.getElementById('dropzonePrompt').classList.add('hidden');
+        resizeCanvasToFit();
+        render();
+        showToast('Loaded xshroom default image!');
+      };
+      img.onerror = () => {
+        console.warn('Failed to load default image xshroom.webp');
+      };
+      img.src = 'xshroom.webp';
+    }
+
+    window.onload = () => {
+      setupEventListeners();
+      resizeCanvasToFit();
+      loadDefaultImage();
+    };
+  </script>
+</body>
+</html>
