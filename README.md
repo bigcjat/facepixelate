@@ -3,7 +3,9 @@
 > **Precision, Browser-Native Interactive Shape Masking & Anonymization Tool**  
 > *No AI required. 100% private, client-side HTML5 canvas pixelation.*
 
-![Face Pixelator Demo](xshroom.webp)
+| Original Image (`xshroom.webp`) | Pixelated Output (`pixelated-face.png`) |
+| :---: | :---: |
+| <img src="xshroom.webp" width="360" alt="Original Image"> | <img src="pixelated-face.png" width="360" alt="Pixelated Output"> |
 
 ---
 
