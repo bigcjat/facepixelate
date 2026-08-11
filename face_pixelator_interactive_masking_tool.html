@@ -159,9 +159,9 @@
         <div>
           <div class="flex justify-between items-center mb-1.5">
             <label for="pixelSize" class="text-xs text-slate-300">Mosaic Block Size</label>
-            <span id="pixelSizeVal" class="text-xs font-mono text-indigo-400 font-bold">16 px</span>
+            <span id="pixelSizeVal" class="text-xs font-mono text-indigo-400 font-bold">32 px</span>
           </div>
-          <input type="range" id="pixelSize" min="4" max="48" step="2" value="16" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+          <input type="range" id="pixelSize" min="4" max="48" step="2" value="32" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500">
         </div>
 
         <!-- Feathering / Edge Softness -->
@@ -212,7 +212,7 @@
       image: new Image(),
       imageLoaded: false,
       maskType: 'ellipse', // 'ellipse' or 'polygon'
-      pixelSize: 16,
+      pixelSize: 32,
       featherBlur: 0,
       showHandles: true,
       
