@@ -288,8 +288,10 @@
       const w = targetCtx.canvas.width;
       const h = targetCtx.canvas.height;
 
-      // Calculate scale factor relative to the on-screen preview canvas
-      const scaleFactor = (canvas.width > 0) ? (w / canvas.width) : 1;
+      // Scale factor relative to a standard 1000px image reference width.
+      // This ensures mosaic block size scales 1-to-1 with image dimensions,
+      // so resizing your browser window never alters the number of pixel blocks across the face!
+      const imageScaleFactor = w / 1000;
 
       // Create offscreen buffer canvas for isolated masked mosaic pixelation
       const maskCanvas = document.createElement('canvas');
@@ -303,14 +305,14 @@
       pathFn(mctx);
       mctx.clip();
 
-      // Apply feathering/blur filter scaled proportionally to target resolution
-      const scaledBlur = state.featherBlur * scaleFactor;
+      // Apply feathering/blur filter scaled proportionally to image resolution
+      const scaledBlur = state.featherBlur * imageScaleFactor;
       if (scaledBlur > 0) {
         mctx.filter = `blur(${scaledBlur}px)`;
       }
 
-      // Classic Mosaic Pixelation: Scale pixel block size to match preview visual proportions
-      const pSize = Math.max(2, state.pixelSize * scaleFactor);
+      // Classic Mosaic Pixelation: Scale pixel block size proportionally with image resolution
+      const pSize = Math.max(2, state.pixelSize * imageScaleFactor);
       const smallW = Math.max(1, Math.ceil(w / pSize));
       const smallH = Math.max(1, Math.ceil(h / pSize));
 
